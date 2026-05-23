@@ -6,8 +6,18 @@ import type { ZaiUsageData } from "./api.js";
 import { UsageCache } from "./usage-cache.js";
 
 const cache = new UsageCache();
+let refreshPromise: Promise<void> | null = null;
+let lastProvider: string | undefined = undefined;
 
 async function refreshUsage(ctx: ExtensionContext): Promise<void> {
+  if (refreshPromise) return refreshPromise;
+  refreshPromise = doRefresh(ctx).finally(() => {
+    refreshPromise = null;
+  });
+  return refreshPromise;
+}
+
+async function doRefresh(ctx: ExtensionContext): Promise<void> {
   if (!ctx.hasUI) return;
   if (!isZaiProvider(ctx.model?.provider)) {
     ctx.ui.setStatus("zai-usage", undefined);
@@ -19,8 +29,7 @@ async function refreshUsage(ctx: ExtensionContext): Promise<void> {
     return;
   }
   try {
-    const apiKey: string | undefined =
-      await ctx.modelRegistry.getApiKeyForProvider("zai");
+    const apiKey: string | undefined = await ctx.modelRegistry.getApiKeyForProvider("zai");
     if (!apiKey) return;
     const data: ZaiUsageData = await fetchZaiUsage(apiKey);
     cache.set(data);
@@ -48,9 +57,14 @@ function clearStatus(ctx: ExtensionContext): void {
 export default function (pi: ExtensionAPI): void {
   pi.on("session_start", async (_event, ctx) => {
     await refreshUsage(ctx);
+    lastProvider = ctx.model?.provider;
   });
   pi.on("model_select", async (_event, ctx) => {
-    cache.clear();
+    const provider: string | undefined = ctx.model?.provider;
+    if (provider !== lastProvider) {
+      cache.clear();
+    }
+    lastProvider = provider;
     await refreshUsage(ctx);
   });
   pi.on("turn_end", async (_event, ctx) => {

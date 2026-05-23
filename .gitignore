@@ -6,3 +6,6 @@ coverage/
 .bifrost.yaml
 *.md
 !README.md
+!CHANGELOG.md
+!CONTRIBUTING.md
+.DS_Store

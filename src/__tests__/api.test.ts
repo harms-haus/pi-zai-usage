@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { isZaiProvider, fetchZaiUsage } from "../api.js";
 
-function mockFetchResponse(data: unknown, ok = true): Response {
+function mockFetchResponse(data: unknown, ok = true, status = 200): Response {
   return {
     ok,
+    status,
     json: vi.fn().mockResolvedValue(data),
   } as unknown as Response;
 }
@@ -93,9 +94,7 @@ describe("fetchZaiUsage", () => {
       mockFetchResponse({
         success: true,
         data: {
-          limits: [
-            { type: "TOKENS_LIMIT", percentage: 45.672 },
-          ],
+          limits: [{ type: "TOKENS_LIMIT", percentage: 45.672 }],
         },
       }),
     );
@@ -109,9 +108,7 @@ describe("fetchZaiUsage", () => {
       mockFetchResponse({
         success: true,
         data: {
-          limits: [
-            { type: "TOKENS_LIMIT", percentage: 100.0 },
-          ],
+          limits: [{ type: "TOKENS_LIMIT", percentage: 100.0 }],
         },
       }),
     );
@@ -125,15 +122,83 @@ describe("fetchZaiUsage", () => {
       mockFetchResponse({
         success: true,
         data: {
-          limits: [
-            { type: "TOKENS_LIMIT", percentage: 0.05 },
-          ],
+          limits: [{ type: "TOKENS_LIMIT", percentage: 0.05 }],
         },
       }),
     );
 
     const result = await fetchZaiUsage("test-key");
     expect(result.percentage).toBe(0.1);
+  });
+
+  it("clamps negative percentage to 0", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      mockFetchResponse({
+        success: true,
+        data: {
+          limits: [{ type: "TOKENS_LIMIT", percentage: -5.0 }],
+        },
+      }),
+    );
+
+    const result = await fetchZaiUsage("test-key");
+    expect(result.percentage).toBe(0);
+  });
+
+  it("clamps percentage above 100 to 100", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      mockFetchResponse({
+        success: true,
+        data: {
+          limits: [{ type: "TOKENS_LIMIT", percentage: 150.0 }],
+        },
+      }),
+    );
+
+    const result = await fetchZaiUsage("test-key");
+    expect(result.percentage).toBe(100);
+  });
+
+  it("returns 0 when percentage is exactly 0", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      mockFetchResponse({
+        success: true,
+        data: {
+          limits: [{ type: "TOKENS_LIMIT", percentage: 0 }],
+        },
+      }),
+    );
+
+    const result = await fetchZaiUsage("test-key");
+    expect(result.percentage).toBe(0);
+  });
+
+  it("returns 100 when percentage is exactly 100", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      mockFetchResponse({
+        success: true,
+        data: {
+          limits: [{ type: "TOKENS_LIMIT", percentage: 100 }],
+        },
+      }),
+    );
+
+    const result = await fetchZaiUsage("test-key");
+    expect(result.percentage).toBe(100);
+  });
+
+  it("handles very small positive percentage (rounds to 0)", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      mockFetchResponse({
+        success: true,
+        data: {
+          limits: [{ type: "TOKENS_LIMIT", percentage: 0.04 }],
+        },
+      }),
+    );
+
+    const result = await fetchZaiUsage("test-key");
+    expect(result.percentage).toBe(0);
   });
 
   it("returns usage data when success response includes msg field", async () => {
@@ -170,9 +235,7 @@ describe("fetchZaiUsage", () => {
       }),
     );
 
-    await expect(fetchZaiUsage("test-key")).rejects.toThrow(
-      "Z.ai API error: unauthorized",
-    );
+    await expect(fetchZaiUsage("test-key")).rejects.toThrow("Z.ai API error: unauthorized");
   });
 
   it("throws when TOKENS_LIMIT is missing from response", async () => {
@@ -191,13 +254,9 @@ describe("fetchZaiUsage", () => {
   });
 
   it("throws on network error (fetch rejects)", async () => {
-    vi.spyOn(globalThis, "fetch").mockRejectedValue(
-      new Error("Network error"),
-    );
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("Network error"));
 
-    await expect(fetchZaiUsage("test-key")).rejects.toThrow(
-      "Network error",
-    );
+    await expect(fetchZaiUsage("test-key")).rejects.toThrow("Network error");
   });
 
   it("sends correct headers including Authorization and Accept-Encoding", async () => {
@@ -205,9 +264,7 @@ describe("fetchZaiUsage", () => {
       mockFetchResponse({
         success: true,
         data: {
-          limits: [
-            { type: "TOKENS_LIMIT", percentage: 0.0 },
-          ],
+          limits: [{ type: "TOKENS_LIMIT", percentage: 0.0 }],
         },
       }),
     );
@@ -223,5 +280,21 @@ describe("fetchZaiUsage", () => {
         },
       }),
     );
+  });
+
+  it("throws with status code when response is not ok (429)", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      mockFetchResponse({ success: false, code: 429, msg: "rate limited" }, false, 429),
+    );
+
+    await expect(fetchZaiUsage("test-key")).rejects.toThrow("status 429");
+  });
+
+  it("throws with status code when response is not ok (500)", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      mockFetchResponse({ success: false, code: 500, msg: "internal server error" }, false, 500),
+    );
+
+    await expect(fetchZaiUsage("test-key")).rejects.toThrow("status 500");
   });
 });

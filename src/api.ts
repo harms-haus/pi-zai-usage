@@ -30,19 +30,21 @@ export function isZaiProvider(provider: string | undefined): boolean {
 }
 
 export async function fetchZaiUsage(apiKey: string): Promise<ZaiUsageData> {
-  const response: Response = await fetch(
-    "https://api.z.ai/api/monitor/usage/quota/limit",
-    {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Accept-Encoding": "identity",
-      },
-      signal: AbortSignal.timeout(10_000),
+  const response: Response = await fetch("https://api.z.ai/api/monitor/usage/quota/limit", {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Accept-Encoding": "identity",
     },
-  );
+    signal: AbortSignal.timeout(10_000),
+  });
 
-  const json: ZaiUsageResponse | ZaiApiError =
-    (await response.json()) as ZaiUsageResponse | ZaiApiError;
+  if (!response.ok) {
+    throw new Error(`Z.ai API request failed with status ${response.status}`);
+  }
+
+  const json: ZaiUsageResponse | ZaiApiError = (await response.json()) as
+    | ZaiUsageResponse
+    | ZaiApiError;
 
   if (!json.success) {
     throw new Error(`Z.ai API error: ${(json as ZaiApiError).msg}`);
@@ -57,8 +59,10 @@ export async function fetchZaiUsage(apiKey: string): Promise<ZaiUsageData> {
     throw new Error("No TOKENS_LIMIT found in Z.ai usage response");
   }
 
-  const percentage: number =
-    Math.round(tokenLimit.percentage * 10) / 10;
+  const percentage: number = Math.max(
+    0,
+    Math.min(100, Math.round(tokenLimit.percentage * 10) / 10),
+  );
   const resetTimeMs: number | undefined = tokenLimit.nextResetTime;
 
   return { percentage, resetTimeMs };

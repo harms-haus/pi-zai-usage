@@ -37,12 +37,17 @@
     "prettier": "^3.0.0",
     "typescript": "^5.0.0",
     "typescript-eslint": "^8.0.0",
+    "@earendil-works/pi-coding-agent": "^0.74.0",
     "vitest": "^3.0.0"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "^0.74.0"
   },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/harms-haus/pi-zai-usage.git"
+  },
   "publishConfig": {
     "access": "public"
   },

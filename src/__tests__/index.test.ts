@@ -7,11 +7,14 @@ const mockCacheGet = vi.fn();
 const mockCacheSet = vi.fn();
 const mockCacheClear = vi.fn();
 
-vi.mock("../api.js", () => ({
-  isZaiProvider: (p: string | undefined) =>
-    p?.toLowerCase().startsWith("zai") ?? false,
-  fetchZaiUsage: (...args: unknown[]) => mockFetchZaiUsage(...args),
-}));
+vi.mock("../api.js", async () => {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-imports
+  const actual = await vi.importActual<typeof import("../api.js")>("../api.js");
+  return {
+    ...actual,
+    fetchZaiUsage: (...args: unknown[]) => mockFetchZaiUsage(...args),
+  };
+});
 
 vi.mock("../usage-cache.js", () => ({
   UsageCache: vi.fn().mockImplementation(() => ({
@@ -47,6 +50,7 @@ async function getHandlers() {
 
 describe("extension entry point", () => {
   beforeEach(() => {
+    vi.resetModules();
     vi.clearAllMocks();
     mockCacheGet.mockReturnValue(null);
     mockGetApiKey.mockResolvedValue("test-key");
@@ -63,10 +67,7 @@ describe("extension entry point", () => {
 
       expect(mockFetchZaiUsage).toHaveBeenCalledWith("test-key");
       expect(mockCacheSet).toHaveBeenCalledWith(sampleUsageData);
-      expect(mockSetStatus).toHaveBeenCalledWith(
-        "zai-usage",
-        expect.any(String),
-      );
+      expect(mockSetStatus).toHaveBeenCalledWith("zai-usage", expect.any(String));
 
       const payload = JSON.parse(mockSetStatus.mock.calls[0][1]);
       expect(payload).toEqual({
@@ -106,17 +107,12 @@ describe("extension entry point", () => {
 
     it("logs error and does not crash when fetchZaiUsage throws", async () => {
       const handlers = await getHandlers();
-      const consoleSpy = vi
-        .spyOn(console, "error")
-        .mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
       mockFetchZaiUsage.mockRejectedValue(new Error("network failure"));
 
       await handlers["session_start"](undefined, mockCtx);
 
-      expect(consoleSpy).toHaveBeenCalledWith(
-        "[pi-zai-usage]",
-        expect.any(Error),
-      );
+      expect(consoleSpy).toHaveBeenCalledWith("[pi-zai-usage]", expect.any(Error));
       expect(mockSetStatus).not.toHaveBeenCalled();
 
       consoleSpy.mockRestore();
@@ -134,10 +130,7 @@ describe("extension entry point", () => {
       expect(mockCacheClear).toHaveBeenCalled();
       expect(mockFetchZaiUsage).toHaveBeenCalledWith("test-key");
       expect(mockCacheSet).toHaveBeenCalledWith(sampleUsageData);
-      expect(mockSetStatus).toHaveBeenCalledWith(
-        "zai-usage",
-        expect.any(String),
-      );
+      expect(mockSetStatus).toHaveBeenCalledWith("zai-usage", expect.any(String));
     });
 
     it("clears status when switching away from ZAI", async () => {
@@ -162,10 +155,7 @@ describe("extension entry point", () => {
       await handlers["turn_end"](undefined, mockCtx);
 
       expect(mockFetchZaiUsage).not.toHaveBeenCalled();
-      expect(mockSetStatus).toHaveBeenCalledWith(
-        "zai-usage",
-        expect.any(String),
-      );
+      expect(mockSetStatus).toHaveBeenCalledWith("zai-usage", expect.any(String));
 
       const payload = JSON.parse(mockSetStatus.mock.calls[0][1]);
       expect(payload).toEqual({
@@ -192,6 +182,85 @@ describe("extension entry point", () => {
 
       expect(mockSetStatus).toHaveBeenCalledWith("zai-usage", undefined);
       expect(mockFetchZaiUsage).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── in-flight guard ──────────────────────────────────────────────────
+
+  describe("in-flight guard", () => {
+    it("coalesces concurrent calls into one API fetch", async () => {
+      const handlers = await getHandlers();
+
+      mockFetchZaiUsage.mockImplementation(() => {
+        return new Promise((r) => {
+          setTimeout(() => {
+            r(sampleUsageData);
+          }, 10);
+        });
+      });
+
+      const [result1, result2] = await Promise.all([
+        handlers["session_start"](undefined, mockCtx),
+        handlers["session_start"](undefined, mockCtx),
+      ]);
+
+      expect(mockFetchZaiUsage).toHaveBeenCalledTimes(1);
+      expect(result1).toBeUndefined();
+      expect(result2).toBeUndefined();
+    });
+
+    it("allows a second fetch after the first completes", async () => {
+      const handlers = await getHandlers();
+
+      await handlers["session_start"](undefined, mockCtx);
+      await handlers["session_start"](undefined, mockCtx);
+
+      expect(mockFetchZaiUsage).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // ── model_select cache clearing ─────────────────────────────────────
+
+  describe("model_select cache clearing", () => {
+    it("does not clear cache when switching between ZAI models", async () => {
+      const handlers = await getHandlers();
+
+      // Initialize lastProvider with ZAI
+      await handlers["session_start"](undefined, mockCtx);
+      mockCacheClear.mockClear();
+
+      // model_select with same ZAI provider should NOT clear cache
+      await handlers["model_select"](undefined, mockCtx);
+
+      expect(mockCacheClear).not.toHaveBeenCalled();
+    });
+
+    it("clears cache when switching from ZAI to non-ZAI provider", async () => {
+      const handlers = await getHandlers();
+      const openaiCtx = { ...mockCtx, model: { provider: "openai", id: "gpt-4" } };
+
+      // Initialize lastProvider with ZAI
+      await handlers["session_start"](undefined, mockCtx);
+      mockCacheClear.mockClear();
+
+      // model_select with non-ZAI provider should clear cache
+      await handlers["model_select"](undefined, openaiCtx);
+
+      expect(mockCacheClear).toHaveBeenCalled();
+    });
+
+    it("clears cache when switching from non-ZAI to ZAI provider", async () => {
+      const handlers = await getHandlers();
+      const openaiCtx = { ...mockCtx, model: { provider: "openai", id: "gpt-4" } };
+
+      // Initialize lastProvider with non-ZAI
+      await handlers["session_start"](undefined, openaiCtx);
+      mockCacheClear.mockClear();
+
+      // model_select with ZAI provider should clear cache
+      await handlers["model_select"](undefined, mockCtx);
+
+      expect(mockCacheClear).toHaveBeenCalled();
     });
   });
 

@@ -1,6 +1,14 @@
 # pi-zai-usage
 
-Z.ai API quota monitor extension for [pi coding agent](https://pi.dev). Displays a progress bar in the [pi-powerline](https://github.com/harms-haus/pi-powerline) footer showing current Z.ai token quota usage.
+> A lightweight [pi coding agent](https://pi.dev) extension that monitors your Z.ai token quota in real time and displays a color-coded progress bar in the terminal footer via [pi-powerline](https://github.com/harms-haus/pi-powerline).
+
+## Features
+
+- Fetches Z.ai token quota usage from the official API
+- Displays a color-coded progress bar in the pi-powerline footer (Line 2, right-aligned)
+- Caches responses for 60 seconds to minimize API calls
+- Automatically activates only when a Z.ai provider is selected
+- Gracefully handles network errors, missing API keys, and headless sessions
 
 ## Installation
 
@@ -22,20 +30,20 @@ The published status is consumed by [pi-powerline](https://github.com/harms-haus
 
 ### Caching
 
-Responses are cached for **60 seconds**. Within the TTL, cached data is returned immediately without an API call. The cache is cleared when the model selection changes.
+Responses are cached for **60 seconds**. Within the TTL, cached data is returned immediately without an API call. The cache is cleared when the selected provider changes (e.g., switching from Z.ai to another provider). Switching between Z.ai models preserves the cache.
 
 ## Events
 
 The extension listens to the following pi lifecycle events:
 
-| Event | Behavior |
-|-------|----------|
-| `session_start` | Fetches and publishes usage data |
-| `model_select` | Clears the cache, then fetches and publishes usage data |
-| `turn_end` | Fetches and publishes usage data (respects cache TTL) |
-| `session_shutdown` | Clears the status display |
+| Event              | Behavior                                                                        |
+| ------------------ | ------------------------------------------------------------------------------- |
+| `session_start`    | Fetches and publishes usage data                                                |
+| `model_select`     | Clears the cache if the provider changed, then fetches and publishes usage data |
+| `turn_end`         | Fetches and publishes usage data (respects cache TTL)                           |
+| `session_shutdown` | Clears the status display                                                       |
 
-All events are no-ops when no UI is available or when the active provider is not Z.ai.
+When no UI is available, all events return early. When the active provider is not Z.ai, the handlers clear any previously published status rather than fetching new data.
 
 ## Status Payload
 
@@ -45,10 +53,10 @@ The extension publishes under the status key `"zai-usage"`:
 { "percentage": 42.5, "resetTimeMs": 1719360000000 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `percentage` | `number` | Token quota used, rounded to one decimal place |
-| `resetTimeMs` | `number \| undefined` | Unix timestamp (ms) when the quota resets |
+| Field         | Type                  | Description                                                            |
+| ------------- | --------------------- | ---------------------------------------------------------------------- |
+| `percentage`  | `number`              | Token quota used, rounded to one decimal place and clamped to [0, 100] |
+| `resetTimeMs` | `number \| undefined` | Unix timestamp (ms) when the quota resets                              |
 
 ## Requirements
 
@@ -67,3 +75,7 @@ pi install git:github.com/harms-haus/pi-zai-usage
 ## License
 
 MIT
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup and PR guidelines.
