@@ -19,27 +19,27 @@ describe("UsageCache", () => {
     expect(cache.get()).toEqual(data);
   });
 
-  it("returns null when cache is expired after 31 seconds", () => {
+  it("returns null when cache is expired after 61 seconds", () => {
     vi.useFakeTimers();
     const data: ZaiUsageData = { percentage: 50, resetTimeMs: 123 };
     cache.set(data);
-    vi.advanceTimersByTime(31_000);
+    vi.advanceTimersByTime(61_000);
     expect(cache.get()).toBeNull();
   });
 
-  it("returns data at exact TTL boundary (30000ms)", () => {
+  it("returns data at exact TTL boundary (60000ms)", () => {
     vi.useFakeTimers();
     const data: ZaiUsageData = { percentage: 50, resetTimeMs: 123 };
     cache.set(data);
-    vi.advanceTimersByTime(30_000);
+    vi.advanceTimersByTime(60_000);
     expect(cache.get()).toEqual(data);
   });
 
-  it("returns null just past TTL boundary (30001ms)", () => {
+  it("returns null just past TTL boundary (60001ms)", () => {
     vi.useFakeTimers();
     const data: ZaiUsageData = { percentage: 50, resetTimeMs: 123 };
     cache.set(data);
-    vi.advanceTimersByTime(30_001);
+    vi.advanceTimersByTime(60_001);
     expect(cache.get()).toBeNull();
   });
 

@@ -22,7 +22,7 @@ The published status is consumed by [pi-powerline](https://github.com/harms-haus
 
 ### Caching
 
-Responses are cached for **30 seconds**. Within the TTL, cached data is returned immediately without an API call. The cache is cleared when the model selection changes.
+Responses are cached for **60 seconds**. Within the TTL, cached data is returned immediately without an API call. The cache is cleared when the model selection changes.
 
 ## Events
 
