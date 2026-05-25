@@ -17,11 +17,13 @@ vi.mock("../api.js", async () => {
 });
 
 vi.mock("../usage-cache.js", () => ({
-  UsageCache: vi.fn().mockImplementation(() => ({
-    get: (...args: unknown[]) => mockCacheGet(...args),
-    set: (...args: unknown[]) => mockCacheSet(...args),
-    clear: (...args: unknown[]) => mockCacheClear(...args),
-  })),
+  UsageCache: vi.fn().mockImplementation(function () {
+    return {
+      get: (...args: unknown[]) => mockCacheGet(...args),
+      set: (...args: unknown[]) => mockCacheSet(...args),
+      clear: (...args: unknown[]) => mockCacheClear(...args),
+    };
+  }),
 }));
 
 vi.mock("@earendil-works/pi-coding-agent", () => ({}));
@@ -63,13 +65,13 @@ describe("extension entry point", () => {
     it("fetches usage, caches, and publishes status when ZAI model + hasUI + API key", async () => {
       const handlers = await getHandlers();
 
-      await handlers["session_start"](undefined, mockCtx);
+      await handlers["session_start"]!(undefined, mockCtx);
 
       expect(mockFetchZaiUsage).toHaveBeenCalledWith("test-key");
       expect(mockCacheSet).toHaveBeenCalledWith(sampleUsageData);
       expect(mockSetStatus).toHaveBeenCalledWith("zai-usage", expect.any(String));
 
-      const payload = JSON.parse(mockSetStatus.mock.calls[0][1]);
+      const payload = JSON.parse(mockSetStatus.mock.calls[0]![1]);
       expect(payload).toEqual({
         percentage: sampleUsageData.percentage,
         resetTimeMs: sampleUsageData.resetTimeMs,
@@ -80,7 +82,7 @@ describe("extension entry point", () => {
       const handlers = await getHandlers();
       mockGetApiKey.mockResolvedValue(undefined);
 
-      await handlers["session_start"](undefined, mockCtx);
+      await handlers["session_start"]!(undefined, mockCtx);
 
       expect(mockFetchZaiUsage).not.toHaveBeenCalled();
       expect(mockSetStatus).not.toHaveBeenCalled();
@@ -90,7 +92,7 @@ describe("extension entry point", () => {
       const handlers = await getHandlers();
       const ctx = { ...mockCtx, model: { provider: "openai", id: "gpt-4" } };
 
-      await handlers["session_start"](undefined, ctx);
+      await handlers["session_start"]!(undefined, ctx);
 
       expect(mockSetStatus).toHaveBeenCalledWith("zai-usage", undefined);
       expect(mockFetchZaiUsage).not.toHaveBeenCalled();
@@ -100,7 +102,7 @@ describe("extension entry point", () => {
       const handlers = await getHandlers();
       const ctx = { ...mockCtx, hasUI: false };
 
-      await handlers["session_start"](undefined, ctx);
+      await handlers["session_start"]!(undefined, ctx);
 
       expect(mockSetStatus).not.toHaveBeenCalled();
     });
@@ -110,7 +112,7 @@ describe("extension entry point", () => {
       const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
       mockFetchZaiUsage.mockRejectedValue(new Error("network failure"));
 
-      await handlers["session_start"](undefined, mockCtx);
+      await handlers["session_start"]!(undefined, mockCtx);
 
       expect(consoleSpy).toHaveBeenCalledWith("[pi-zai-usage]", expect.any(Error));
       expect(mockSetStatus).not.toHaveBeenCalled();
@@ -125,7 +127,7 @@ describe("extension entry point", () => {
     it("clears cache and fetches fresh data when switching to ZAI", async () => {
       const handlers = await getHandlers();
 
-      await handlers["model_select"](undefined, mockCtx);
+      await handlers["model_select"]!(undefined, mockCtx);
 
       expect(mockCacheClear).toHaveBeenCalled();
       expect(mockFetchZaiUsage).toHaveBeenCalledWith("test-key");
@@ -137,7 +139,7 @@ describe("extension entry point", () => {
       const handlers = await getHandlers();
       const ctx = { ...mockCtx, model: { provider: "openai", id: "gpt-4" } };
 
-      await handlers["model_select"](undefined, ctx);
+      await handlers["model_select"]!(undefined, ctx);
 
       expect(mockCacheClear).toHaveBeenCalled();
       expect(mockSetStatus).toHaveBeenCalledWith("zai-usage", undefined);
@@ -152,12 +154,12 @@ describe("extension entry point", () => {
       const handlers = await getHandlers();
       mockCacheGet.mockReturnValue(sampleUsageData);
 
-      await handlers["turn_end"](undefined, mockCtx);
+      await handlers["turn_end"]!(undefined, mockCtx);
 
       expect(mockFetchZaiUsage).not.toHaveBeenCalled();
       expect(mockSetStatus).toHaveBeenCalledWith("zai-usage", expect.any(String));
 
-      const payload = JSON.parse(mockSetStatus.mock.calls[0][1]);
+      const payload = JSON.parse(mockSetStatus.mock.calls[0]![1]);
       expect(payload).toEqual({
         percentage: sampleUsageData.percentage,
         resetTimeMs: sampleUsageData.resetTimeMs,
@@ -168,7 +170,7 @@ describe("extension entry point", () => {
       const handlers = await getHandlers();
       mockCacheGet.mockReturnValue(null);
 
-      await handlers["turn_end"](undefined, mockCtx);
+      await handlers["turn_end"]!(undefined, mockCtx);
 
       expect(mockFetchZaiUsage).toHaveBeenCalledWith("test-key");
       expect(mockCacheSet).toHaveBeenCalledWith(sampleUsageData);
@@ -178,7 +180,7 @@ describe("extension entry point", () => {
       const handlers = await getHandlers();
       const ctx = { ...mockCtx, model: { provider: "openai", id: "gpt-4" } };
 
-      await handlers["turn_end"](undefined, ctx);
+      await handlers["turn_end"]!(undefined, ctx);
 
       expect(mockSetStatus).toHaveBeenCalledWith("zai-usage", undefined);
       expect(mockFetchZaiUsage).not.toHaveBeenCalled();
@@ -200,8 +202,8 @@ describe("extension entry point", () => {
       });
 
       const [result1, result2] = await Promise.all([
-        handlers["session_start"](undefined, mockCtx),
-        handlers["session_start"](undefined, mockCtx),
+        handlers["session_start"]!(undefined, mockCtx),
+        handlers["session_start"]!(undefined, mockCtx),
       ]);
 
       expect(mockFetchZaiUsage).toHaveBeenCalledTimes(1);
@@ -212,8 +214,8 @@ describe("extension entry point", () => {
     it("allows a second fetch after the first completes", async () => {
       const handlers = await getHandlers();
 
-      await handlers["session_start"](undefined, mockCtx);
-      await handlers["session_start"](undefined, mockCtx);
+      await handlers["session_start"]!(undefined, mockCtx);
+      await handlers["session_start"]!(undefined, mockCtx);
 
       expect(mockFetchZaiUsage).toHaveBeenCalledTimes(2);
     });
@@ -226,11 +228,11 @@ describe("extension entry point", () => {
       const handlers = await getHandlers();
 
       // Initialize lastProvider with ZAI
-      await handlers["session_start"](undefined, mockCtx);
+      await handlers["session_start"]!(undefined, mockCtx);
       mockCacheClear.mockClear();
 
       // model_select with same ZAI provider should NOT clear cache
-      await handlers["model_select"](undefined, mockCtx);
+      await handlers["model_select"]!(undefined, mockCtx);
 
       expect(mockCacheClear).not.toHaveBeenCalled();
     });
@@ -240,11 +242,11 @@ describe("extension entry point", () => {
       const openaiCtx = { ...mockCtx, model: { provider: "openai", id: "gpt-4" } };
 
       // Initialize lastProvider with ZAI
-      await handlers["session_start"](undefined, mockCtx);
+      await handlers["session_start"]!(undefined, mockCtx);
       mockCacheClear.mockClear();
 
       // model_select with non-ZAI provider should clear cache
-      await handlers["model_select"](undefined, openaiCtx);
+      await handlers["model_select"]!(undefined, openaiCtx);
 
       expect(mockCacheClear).toHaveBeenCalled();
     });
@@ -254,11 +256,11 @@ describe("extension entry point", () => {
       const openaiCtx = { ...mockCtx, model: { provider: "openai", id: "gpt-4" } };
 
       // Initialize lastProvider with non-ZAI
-      await handlers["session_start"](undefined, openaiCtx);
+      await handlers["session_start"]!(undefined, openaiCtx);
       mockCacheClear.mockClear();
 
       // model_select with ZAI provider should clear cache
-      await handlers["model_select"](undefined, mockCtx);
+      await handlers["model_select"]!(undefined, mockCtx);
 
       expect(mockCacheClear).toHaveBeenCalled();
     });
@@ -270,7 +272,7 @@ describe("extension entry point", () => {
     it("clears status via setStatus with undefined", async () => {
       const handlers = await getHandlers();
 
-      handlers["session_shutdown"](undefined, mockCtx);
+      handlers["session_shutdown"]!(undefined, mockCtx);
 
       expect(mockSetStatus).toHaveBeenCalledWith("zai-usage", undefined);
     });
@@ -279,7 +281,7 @@ describe("extension entry point", () => {
       const handlers = await getHandlers();
       const ctx = { ...mockCtx, hasUI: false };
 
-      handlers["session_shutdown"](undefined, ctx);
+      handlers["session_shutdown"]!(undefined, ctx);
 
       expect(mockSetStatus).not.toHaveBeenCalled();
     });
